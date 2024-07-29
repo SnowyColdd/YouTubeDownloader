@@ -5,6 +5,7 @@ from yt_dlp import YoutubeDL
 import re
 import os 
 import winreg
+from win10toast import ToastNotifier
 
 def remove_ansi_escape_sequences(text):
     ansi_escape = re.compile(r'\x1b\[([0-9]+)(;[0-9]+)*m')
@@ -25,12 +26,18 @@ def get_download_folder():
         return os.path.join(os.path.expanduser("~"), "Downloads", "YouTube")
 
 def progress_hook(d):
+    global progress_label, size_label, progress_bar
+    if stop_download:
+        raise Exception("Pobieranie zatrzymane przez użytkownika.")
+
     if d['status'] == 'downloading':
-        percent_str = remove_ansi_escape_sequences(d['_percent_str']).strip('%')
-        progress_label.config(text=f"Pobieranie: {percent_str}% ukończono")
-        if d.get('_total_bytes_str'):
-            size_label.config(text=f"Szacowany rozmiar: {d['_total_bytes_str']}")
-        progress_bar['value'] = float(percent_str)
+        total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate')
+        downloaded_bytes = d.get('downloaded_bytes')
+        if total_bytes:
+            percent = downloaded_bytes / total_bytes * 100
+            progress_bar['value'] = percent
+            progress_label.config(text=f"Pobieranie: {percent:.2f}%")
+            size_label.config(text=f"Rozmiar: {total_bytes / (1024 * 1024):.2f} MB")
     elif d['status'] == 'finished':
         progress_label.config(text="Pobieranie zakończone!")
         size_label.config(text="Plik zapisany.")
@@ -52,6 +59,9 @@ def start_download():
     progress_bar['value'] = 0
     progress_label.config(text="Rozpoczynanie pobierania...")
     size_label.config(text="Szacowany rozmiar: Nieznany")
+
+    stop_button.config(command=stop_download_function)
+    stop_button.place(x=300, y=150)
 
     download_thread = threading.Thread(target=download_video, args=(url, selected_resolution_text))
     download_thread.start()
@@ -84,8 +94,10 @@ def download_video(url, selected_resolution_text):
         except Exception as e:
             if stop_download:
                 progress_label.config(text="Pobieranie zatrzymane.")
+                size_label.config(text="")
             else:
-                progress_label.config(text=f"Błąd podczas pobierania: {e}")
+                progress_label.config(text=f"Błąd: {e}")
+                size_label.config(text="Pobieranie nie powiodło się.")
 
 root = tk.Tk()
 root.title("YouTube Downloader 1.2")
