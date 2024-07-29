@@ -2,10 +2,11 @@ import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
 from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError
 import re
-import os 
+import os
 import winreg
-from win10toast import ToastNotifier
+import time
 
 def remove_ansi_escape_sequences(text):
     ansi_escape = re.compile(r'\x1b\[([0-9]+)(;[0-9]+)*m')
@@ -26,7 +27,7 @@ def get_download_folder():
         return os.path.join(os.path.expanduser("~"), "Downloads", "YouTube")
 
 def progress_hook(d):
-    global progress_label, size_label, progress_bar
+    global progress_label, size_label, progress_bar, speed_label, eta_label
     if stop_download:
         raise Exception("Pobieranie zatrzymane przez użytkownika.")
 
@@ -38,10 +39,22 @@ def progress_hook(d):
             progress_bar['value'] = percent
             progress_label.config(text=f"Pobieranie: {percent:.2f}%")
             size_label.config(text=f"Rozmiar: {total_bytes / (1024 * 1024):.2f} MB")
+        
+        speed = d.get('speed')
+        if speed:
+            speed_label.config(text=f"Prędkość: {speed / (1024 * 1024):.2f} MB/s")
+        
+        eta = d.get('eta')
+        if eta:
+            eta_label.config(text=f"Przewidywany czas: {time.strftime('%H:%M:%S', time.gmtime(eta))}")
+
     elif d['status'] == 'finished':
         progress_label.config(text="Pobieranie zakończone!")
         size_label.config(text="Plik zapisany.")
+        speed_label.config(text="")
+        eta_label.config(text="")
 
+download_queue = []
 
 def start_download():
     url = link.get()
@@ -49,22 +62,20 @@ def start_download():
         messagebox.showerror("Błąd", "Proszę wprowadzić link przed rozpoczęciem pobierania.")
         return
     
-    selected_resolution_text = selected_resolution.get()
-
-    if selected_resolution_text == "Najwyższa":
-        selected_resolution_text = "bestvideo+bestaudio/best"
+    download_queue.append((url, selected_resolution.get()))
+    if len(download_queue) == 1:
+        process_queue()
+        stop_button.place(x=300, y=150)
     else:
-        selected_resolution_text = f'bestvideo[height<={selected_resolution_text[:-1]}]+bestaudio/best'
+        messagebox.showinfo("Informacja", "Link dodany do kolejki pobierań.")
 
-    progress_bar['value'] = 0
-    progress_label.config(text="Rozpoczynanie pobierania...")
-    size_label.config(text="Szacowany rozmiar: Nieznany")
-
-    stop_button.config(command=stop_download_function)
-    stop_button.place(x=300, y=150)
-
-    download_thread = threading.Thread(target=download_video, args=(url, selected_resolution_text))
-    download_thread.start()
+def process_queue():
+    if download_queue:
+        url, resolution = download_queue[0]
+        download_thread = threading.Thread(target=download_video, args=(url, resolution))
+        download_thread.start()
+    else:
+        messagebox.showinfo("Informacja", "Wszystkie pobierania zakończone.")
 
 stop_download = False
 
@@ -79,29 +90,51 @@ def download_video(url, selected_resolution_text):
     stop_download = False
 
     download_folder = get_download_folder()
+
     ydl_opts = {
-        'format': selected_resolution_text,
         'outtmpl': os.path.join(download_folder, '%(title)s.%(ext)s'),
         'progress_hooks': [progress_hook],
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'
-        }
+        },
     }
+
+    if selected_resolution_text == "Tylko audio":
+        ydl_opts['format'] = "bestaudio/best"
+        ydl_opts['postprocessors'] = [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }]
+    else:
+        resolution_map = {
+            "4K": "2160",
+            "1440p": "1440",
+            "1080p": "1080",
+            "720p": "720",
+            "480p": "480",
+            "360p": "360"
+        }
+        selected_res = resolution_map.get(selected_resolution_text, "best")
+        ydl_opts['format'] = f'bestvideo[height<={selected_res}]+bestaudio/best[height<={selected_res}]'
 
     with YoutubeDL(ydl_opts) as ydl:
         try:
             ydl.download([url])
-        except Exception as e:
-            if stop_download:
-                progress_label.config(text="Pobieranie zatrzymane.")
-                size_label.config(text="")
+        except DownloadError as e:
+            error_message = str(e)
+            if "Requested format is not available" in error_message:
+                messagebox.showwarning("Ostrzeżenie", "Wybrany format nie jest dostępny. Spróbuj innej rozdzielczości.")
             else:
-                progress_label.config(text=f"Błąd: {e}")
-                size_label.config(text="Pobieranie nie powiodło się.")
-
+                messagebox.showerror("Błąd", f"Wystąpił błąd podczas pobierania: {error_message}")
+        except Exception as e:
+            messagebox.showerror("Błąd", f"Nieoczekiwany błąd: {str(e)}")
+        finally:
+            download_queue.pop(0)
+            root.after(1000, process_queue)
 root = tk.Tk()
-root.title("YouTube Downloader 1.2")
-root.geometry("500x400")
+root.title("YouTube Downloader 1.4")
+root.geometry("500x500")
 root.resizable(0, 0)
 root.config(bg='#e6f2ff')
 
@@ -123,10 +156,9 @@ stop_button = ttk.Button(root, text='Zatrzymaj', command=stop_download_function)
 stop_button.place(x=300, y=150)
 stop_button.place_forget()
 
-# okno od wybierania rozdzielczości pobieraniego filmu
-resolution = ["Najwyższa", "1080p", "720p", "480p", "360p"]
+resolution = ["4K", "1440p", "1080p", "720p", "480p", "360p", "Tylko audio"]
 selected_resolution = tk.StringVar(root)
-selected_resolution.set(resolution[0])  # domyślna najwyższa rozdzielczość
+selected_resolution.set(resolution[0])
 
 ttk.Label(root, text="Wybierz rozdzielczość:").place(x=30, y=210)
 resolution_dropdown = tk.OptionMenu(root, selected_resolution, *resolution)
@@ -135,10 +167,16 @@ resolution_dropdown.place(x=200, y=208)
 progress_label = tk.Label(root, text="", font='Helvetica 12', bg='#e6f2ff', fg='black')
 progress_label.place(x=30, y=250)
 
-size_label = tk.Label(root, text="Szaczowany czas: Nieznazy", font='Helvetica 12', bg='#e6f2ff', fg='black')
+size_label = tk.Label(root, text="", font='Helvetica 12', bg='#e6f2ff', fg='black')
 size_label.place(x=30, y=290)
 
+speed_label = tk.Label(root, text="", font='Helvetica 12', bg='#e6f2ff', fg='black')
+speed_label.place(x=30, y=330)
+
+eta_label = tk.Label(root, text="", font='Helvetica 12', bg='#e6f2ff', fg='black')
+eta_label.place(x=30, y=370)
+
 progress_bar = ttk.Progressbar(root, orient="horizontal", length=400, mode="determinate")
-progress_bar.place(x=30, y=320)
+progress_bar.place(x=30, y=410)
 
 root.mainloop()
