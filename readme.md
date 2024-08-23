@@ -16,7 +16,7 @@ YouTubeDownloader korzysta z biblioteki yt-dlp, która jest forkiem popularnego 
 
 ## Instalacja
 
-1. Pobierz plik wykonywalny (.exe) z [sekcji releases](link_do_releases).
+1. Pobierz plik wykonywalny (.exe) z [sekcji releases](https://github.com/SnowyColdd/YouTubeDownloader/releases).
 2. Uruchom pobrany plik.
 
 Alternatywnie, możesz sklonować to repozytorium i uruchomić skrypt Pythona:
