@@ -1,4 +1,5 @@
 import os
+import subprocess
 import time
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
@@ -7,9 +8,34 @@ from utils import get_download_folder, progress_hook
 class Downloader:
     def __init__(self, gui):
         self.stop_download = False
+        self.paused = False
         self.gui = gui
-    
-    def download_video(self, url, selected_resolution_text):
+
+    def download_subtitles(self, url, subtitle_language):
+        ydl_opts = {
+            'writesubtitles': True,
+            'writeautomaticsub': True,
+            'subtitleslangs': [subtitle_language] if subtitle_language else ['en'],
+            'skip_download': True,
+            'outtmpl': os.path.join(get_download_folder(), '%(title)s.%(ext)s'),
+            'postprocessors': [{
+                'key': 'FFmpegSubtitlesConvertor',
+                'format': 'srt',
+            }],
+        }
+        with YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+
+    def resume_download(self, url, partial_file):
+        ydl_opts = {
+            'outtmpl': partial_file,
+            'progress_hooks': [self.progress_hook_wrapper],
+            'continuedl': True,
+        }
+        with YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+
+    def download_video(self, url, selected_resolution_text, download_subtitles, output_format, subtitle_language=None):
         self.stop_download = False
         download_folder = get_download_folder()
         ydl_opts = {
@@ -22,11 +48,20 @@ class Downloader:
 
         if selected_resolution_text == "Tylko audio":
             ydl_opts['format'] = "bestaudio/best"
-            ydl_opts['postprocessors'] = [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }]
+            
+            # Obsługa różnych formatów wyjściowych dla audio
+            if output_format == "mp3":
+                ydl_opts['postprocessors'] = [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }]
+            else:
+                ydl_opts['postprocessors'] = [{
+                    'key': 'FFmpegVideoConvertor',
+                    'preferedformat': output_format,
+                }]
+                ydl_opts['outtmpl'] = os.path.join(download_folder, f'%(title)s.{output_format}')
         else:
             resolution_map = {
                 "4K": "2160",
@@ -38,18 +73,53 @@ class Downloader:
             }
             selected_res = resolution_map.get(selected_resolution_text, "best")
             ydl_opts['format'] = f'bestvideo[height<={selected_res}]+bestaudio/best[height<={selected_res}]'
-        
-        with YoutubeDL(ydl_opts) as ydl:
-            try:
+
+        # Obsługa pobierania/generowania napisów
+        try:
+            with YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+
+                # Sprawdzanie dostępności napisów
+                if download_subtitles:
+                    subtitles = info.get('subtitles') or info.get('automatic_captions')
+                    if not subtitles:
+                        self.gui.show_message(
+                            "Informacja",
+                            "Dla tego filmu nie są dostępne napisy. Zostaną wygenerowane automatyczne napisy."
+                        )
+                        ydl_opts['writeautomaticsub'] = True
+                    else:
+                        ydl_opts['writesubtitles'] = True
+                    
+                    ydl_opts['subtitleslangs'] = [subtitle_language] if subtitle_language else ['en']
+                    ydl_opts['postprocessors'] = [{
+                        'key': 'FFmpegSubtitlesConvertor',
+                        'format': 'srt',
+                    }]
+                    ydl_opts['outtmpl'] = {
+                        'default': os.path.join(download_folder, '%(title)s.%(ext)s'),
+                        'subtitle': os.path.join(download_folder, '%(title)s.srt')
+                    }
+                
                 ydl.download([url])
-            except DownloadError as e:
-                error_message = str(e)
-                if "Requested format is not available" in error_message:
-                    return f"Wybrany format nie jest dostępny. Spróbuj innej rozdzielczości."
-                else:
-                    return f"Wystąpił błąd podczas pobierania: {error_message}"
-            except Exception as e:
-                return f"Nieoczekiwany błąd: {str(e)}"
+                filename = ydl.prepare_filename(info)
+                base, ext = os.path.splitext(filename)
+
+                # Konwersja do wybranego formatu, jeśli jest inny niż pierwotny
+                if selected_resolution_text != "Tylko audio" and output_format and ext != f'.{output_format}':
+                    new_filename = f"{base}.{output_format}"
+                    subprocess.run(["ffmpeg", "-i", filename, new_filename])
+                    os.remove(filename)  # Usunięcie oryginalnego pliku
+                    filename = new_filename
+
+        except DownloadError as e:
+            error_message = str(e)
+            if "Requested format is not available" in error_message:
+                return f"Wybrany format nie jest dostępny. Spróbuj innej rozdzielczości."
+            else:
+                return f"Wystąpił błąd podczas pobierania: {error_message}"
+        except Exception as e:
+            return f"Nieoczekiwany błąd: {str(e)}"
 
         return "Pobieranie zakończone!"
     
@@ -58,3 +128,41 @@ class Downloader:
 
     def stop(self):
         self.stop_download = True
+
+    def pause(self):
+        self.paused = True
+    
+    def resume(self):
+        self.paused = False
+
+    def convert_format(self, input_file, output_format):
+        output_file = os.path.splitext(input_file)[0] + "." + output_format
+        total_duration = self.get_video_duration(input_file)
+        
+        command = ["ffmpeg", "-i", input_file, "-progress", "pipe:1", "-nostats", output_file]
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        
+        start_time = time.time()
+        for line in iter(process.stdout.readline, ''):
+            if 'out_time_ms' in line:
+                time_ms = int(line.split('=')[1])
+                progress = (time_ms / 1000000) / total_duration
+                elapsed_time = time.time() - start_time
+                estimated_total_time = elapsed_time / progress if progress > 0 else 0
+                remaining_time = estimated_total_time - elapsed_time
+                
+                self.gui.root.after_idle(self.update_conversion_progress, progress * 100, remaining_time, line)
+        
+        process.wait()
+        return output_file
+
+    def get_video_duration(self, input_file):
+        result = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input_file], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        return float(result.stdout)
+
+    def update_conversion_progress(self, progress, remaining_time, details):
+        self.gui.conversion_label.config(text=f"Konwersja: {progress:.2f}%")
+        self.gui.conversion_progress['value'] = progress
+        self.gui.conversion_time_label.config(text=f"Pozostały czas: {time.strftime('%M:%S', time.gmtime(remaining_time))}")
+        self.gui.conversion_details_label.config(text=details)
+        self.gui.root.update_idletasks()
