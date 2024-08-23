@@ -3,6 +3,9 @@ import os
 import winreg
 import time
 
+def is_youtube_link(url):
+        youtube_regex = r'(https?://)?(www\.)?(youtube|youtu|youtube-nocookie)\.(com|be)/'
+        return re.match(youtube_regex, url) is not None
 
 def remove_ansi_escape_sequences(text):
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
@@ -45,6 +48,33 @@ def progress_hook(d, stop_download, progress_label, size_label, progress_bar, sp
 
     elif d['status'] == 'finished':
         progress_label.config(text="Pobieranie zakończone.")
-        size_label.config(text="Plik zapisany.")
+        size_label.config(text="Zapisywanie pliku...")
         speed_label.config(text="")
         eta_label.config(text="")
+
+def is_youtube_link(url):
+    return 'youtube.com' in url or 'youtu.be' in url
+
+def format_time(seconds):
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
+
+import csv
+from datetime import datetime
+
+def generate_download_report(downloads):
+    """Generuje raport z pobierań."""
+    report_file = f"raport_pobran_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    with open(report_file, 'w', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        writer.writerow(["URL", "Rozdzielczość", "Format", "Data pobrania", "Status"])
+        for download in downloads:
+            writer.writerow([
+                download['url'],
+                download['resolution'],
+                download['format'],
+                download['date'],
+                download['status']
+            ])
+    return report_file
