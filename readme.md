@@ -1,6 +1,8 @@
 # YouTubeDownloader
-
 YouTubeDownloader to proste narzędzie do pobierania filmów z YouTube, wykorzystujące bibliotekę yt-dlp.
+
+## Ważne
+Program jest jednym z moich pierwszych projektów, więc można spodziewać sie błedów.
 
 ## Funkcje
 
@@ -19,7 +21,7 @@ YouTubeDownloader korzysta z biblioteki yt-dlp, która jest forkiem popularnego 
 1. Pobierz plik wykonywalny (.exe) z [sekcji releases](https://github.com/SnowyColdd/YouTubeDownloader/releases).
 2. Uruchom pobrany plik.
 
-Alternatywnie, możesz sklonować to repozytorium i uruchomić skrypt Pythona:
+Alternatywnie, możesz sklonować to repozytorium i uruchomić skrypt main.py
 
 ## Użycie
 
