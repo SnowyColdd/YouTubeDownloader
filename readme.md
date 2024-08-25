@@ -5,7 +5,7 @@ YouTubeDownloader to proste narzędzie do pobierania filmów z YouTube, wykorzys
 Program jest jednym z moich pierwszych projektów, więc można spodziewać sie błedów.
 
 ## Dlaczego wersja 2.0?
-Program od staru ma wersje 2.0 ponieważ jest on reworkiem wersji 1.0 który był prywatnym projektem, natomiast udostępniam wersje 2.0 publicznie.
+Program od startu ma wersje 2.0 ponieważ jest on reworkiem wersji 1.0 który był prywatnym projektem, natomiast udostępniam wersje 2.0 publicznie.
 
 ## Funkcje
 
