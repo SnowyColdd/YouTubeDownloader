@@ -75,32 +75,39 @@ class Downloader:
             ydl_opts['format'] = f'bestvideo[height<={selected_res}]+bestaudio/best[height<={selected_res}]'
 
         # Obsługa pobierania/generowania napisów
+        ydl_opts['postprocessors'] = [] 
+
+        if download_subtitles:
+            ydl_opts['writesubtitles'] = True
+            ydl_opts['writeautomaticsub'] = True
+            ydl_opts['subtitleslangs'] = [subtitle_language] if subtitle_language else ['en']
+            ydl_opts['postprocessors'].append({
+                'key': 'FFmpegSubtitlesConvertor',
+                'format': 'srt',
+            })
+
         try:
             with YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-
-                # Sprawdzanie dostępności napisów
+                
                 if download_subtitles:
-                    subtitles = info.get('subtitles') or info.get('automatic_captions')
-                    if not subtitles:
-                        self.gui.show_message(
-                            "Informacja",
-                            "Dla tego filmu nie są dostępne napisy. Zostaną wygenerowane automatyczne napisy."
-                        )
+                    subtitles = info.get('subtitles', {})
+                    auto_subtitles = info.get('automatic_captions', {})
+                    
+                    if subtitle_language in subtitles:
+                        ydl_opts['writesubtitles'] = True
+                        ydl_opts['writeautomaticsub'] = False
+                    elif subtitle_language in auto_subtitles:
+                        ydl_opts['writesubtitles'] = False
                         ydl_opts['writeautomaticsub'] = True
                     else:
-                        ydl_opts['writesubtitles'] = True
-                    
-                    ydl_opts['subtitleslangs'] = [subtitle_language] if subtitle_language else ['en']
-                    ydl_opts['postprocessors'] = [{
-                        'key': 'FFmpegSubtitlesConvertor',
-                        'format': 'srt',
-                    }]
-                    ydl_opts['outtmpl'] = {
-                        'default': os.path.join(download_folder, '%(title)s.%(ext)s'),
-                        'subtitle': os.path.join(download_folder, '%(title)s.srt')
-                    }
-                
+                        self.gui.show_message(
+                            "Informacja",
+                            f"Napisy w języku {subtitle_language} nie są dostępne. Pobieranie bez napisów."
+                        )
+                        ydl_opts['writesubtitles'] = False
+                        ydl_opts['writeautomaticsub'] = False
+
                 ydl.download([url])
                 filename = ydl.prepare_filename(info)
                 base, ext = os.path.splitext(filename)

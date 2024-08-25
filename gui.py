@@ -6,7 +6,7 @@ from update_manager import *
 class YouTubeDownloaderGUI:
     def __init__(self, root, start_download_callback, stop_download_callback):
         self.root = root
-        self.current_version = "2.0" #wersja programu
+        self.current_version = "2.1" #wersja programu
         self.start_download_callback = start_download_callback
         self.stop_download_callback = stop_download_callback
         self.root.title(f"YouTube Downloader")
@@ -25,7 +25,7 @@ class YouTubeDownloaderGUI:
         style.map("TNotebook.Tab", background=[("selected", "#3498db")])
         style.configure("TLabel", font=("Helvetica", 12), background='#dcdad5', foreground='#000000')
         style.configure("TButton", font=("Helvetica", 12, 'bold'), background='#2980b9', foreground='#ffffff')
-        style.map("TButton", background=[("active", "#1abc9c")])  # Hover effect
+        style.map("TButton", background=[("active", "#1abc9c")])
         style.configure("TEntry", font=("Helvetica", 12), padding=[5, 5])
         style.configure("TProgressbar", thickness=20, background='#3498db')
 
@@ -40,7 +40,7 @@ class YouTubeDownloaderGUI:
         self.link_label = ttk.Label(download_tab, text="Pobierz wideo z YouTube")
         self.link_label.grid(row=0, column=0, columnspan=3, pady=10)
 
-        ttk.Label(download_tab, text="Wklej link tutaj:").grid(row=1, column=0, padx=5, pady=5, sticky='w')
+        ttk.Label(download_tab, text="Wklej link tutaj =>").grid(row=1, column=0, padx=5, pady=5, sticky='w')
         self.link = tk.StringVar()
         ttk.Entry(download_tab, width=50, textvariable=self.link).grid(row=1, column=1, padx=1, pady=1, sticky='w')
 
@@ -107,7 +107,7 @@ class YouTubeDownloaderGUI:
 
         # update tab
         update_tab = ttk.Frame(tab_control, padding="10 10 10 10")
-        tab_control.add(update_tab, text="Aktualizacje i informacje")
+        tab_control.add(update_tab, text="Aktualizacje/Informacje")
 
         ttk.Label(update_tab, text=f"Aktualna wersja: {self.current_version}").grid(column=0, row=0, padx=5, pady=5, sticky='w')
         ttk.Label(update_tab, text="Autor - snowycoldd:").grid(column=1, row=0, padx=5, pady=5, sticky='w')
