@@ -2,16 +2,20 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from utils import is_youtube_link
 from update_manager import *
+import sys
+import os
 
 class YouTubeDownloaderGUI:
-    def __init__(self, root, start_download_callback, stop_download_callback):
+    def __init__(self, root, start_download_callback, stop_download_callback, check_for_updates_callback, download_update_callback):
         self.root = root
-        self.current_version = "2.1" #wersja programu
+        self.current_version = "2.2" #Program  version
         self.start_download_callback = start_download_callback
         self.stop_download_callback = stop_download_callback
+        self.check_for_updates_callback = check_for_updates_callback
+        self.download_update_callback = download_update_callback
         self.root.title(f"YouTube Downloader")
         self.root.geometry("700x400")
-        self.root.resizable(1, 1)
+        self.root.resizable(0, 0)
         self.root.config(bg='#2c3e50')
         self.init_ui()
         self.root.after(1000, self.check_clipboard)
@@ -103,7 +107,9 @@ class YouTubeDownloaderGUI:
         self.download_path = tk.StringVar(value="/default/path")
         ttk.Entry(settings_tab, width=40, textvariable=self.download_path).grid(column=1, row=0, columnspan=2, padx=5, pady=5)
 
-        ttk.Button(settings_tab, text="Zapisz ustawienia", command=self.save_settings).grid(column=0, row=1, pady=10)
+        ttk.Label(settings_tab, text="Domyślnie pobiera się do: Pobrane => YouTube").grid(column=0, row=1, columnspan=3, padx=5, pady=5, sticky='w')
+
+        ttk.Button(settings_tab, text="Zapisz ustawienia", command=self.save_settings).grid(column=0, row=2, pady=10)
 
         # update tab
         update_tab = ttk.Frame(tab_control, padding="10 10 10 10")
@@ -118,25 +124,42 @@ class YouTubeDownloaderGUI:
         self.check_update_button = ttk.Button(update_tab, text="Sprawdź aktualizacje", command=self.check_for_updates)
         self.check_update_button.grid(column=0, row=2, padx=5, pady=5, sticky='w')
 
-        self.update_button = ttk.Button(update_tab, text="Zainstaluj aktualizację", command=self.install_update)
+        self.update_button = ttk.Button(update_tab, text="Zainstaluj aktualizację", command=self.download_update_callback)
         self.update_button.grid(column=0, row=3, padx=5, pady=5, sticky='w')
         self.update_button.grid_remove()
 
     def check_for_updates(self):
-        """Sprawdza dostępność aktualizacji."""
-        self.update_status_label.config(text="Sprawdzanie aktualizacji...")
-        new_version, download_url = check_for_updates(self.current_version)
-        if new_version:
-            self.update_status_label.config(text=f"Dostępna nowa wersja: {new_version}")
-            self.update_button.grid()
-            self.download_url = download_url
-        else:
-            self.update_status_label.config(text="Brak dostępnych aktualizacji.")
+        self.check_for_updates_callback()
 
-    def install_update(self):
-        """Instaluje dostępną aktualizację."""
-        self.update_status_label.config(text="Instalowanie aktualizacji...")
-        download_and_install_update(self.download_url)
+    def show_update_dialog(self, update_info):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Dostępna aktualizacja")
+        dialog.geometry("500x400")
+        dialog.resizable(0, 0)
+
+        ttk.Label(dialog, text=f"Nowa wersja: {update_info.version}", font=("Helvetica", 14)).pack(pady=10)
+        
+        release_notes_text = tk.Text(dialog, wrap="word", width=60, height=10)
+        release_notes_text.insert("1.0", update_info.release_notes)
+        release_notes_text.config(state="disabled")
+        release_notes_text.pack(pady=10)
+
+        def on_download():
+            dialog.destroy()
+            downloaded_file = self.download_update_callback(update_info)
+            if downloaded_file:
+                messagebox.showinfo("Aktualizacja", f"Aktualizacja pobrana: {downloaded_file}")
+                self.root.quit()
+                self.root.destroy()
+                os.remove(sys.argv[0])
+
+        ttk.Button(dialog, text="Pobierz", command=on_download).pack(pady=10)
+        ttk.Button(dialog, text="Anuluj", command=dialog.destroy).pack()
+
+        dialog.transient(self.root)
+        dialog.grab_set()
+        self.root.wait_window(dialog)
+
 
     def paste_from_clipboard(self):
         clipboard_content = self.root.clipboard_get()
@@ -187,7 +210,7 @@ class YouTubeDownloaderGUI:
         dialog = tk.Toplevel(self.root)
         dialog.title("Wybór języka napisów")
         dialog.geometry("400x300")
-        dialog.resizable(False, False)
+        dialog.resizable(0, 0) 
 
         ttk.Label(dialog, text="Wybierz język napisów:").pack(pady=10)
         language_menu = tk.OptionMenu(dialog, language, *languages)
@@ -210,7 +233,6 @@ class YouTubeDownloaderGUI:
         return language.get()
 
     def save_settings(self):
-        # Implementacja zapisywania ustawień
         messagebox.showinfo("Ustawienia", "Ustawienia zostały zapisane.")
 
     def show_message(self, title, message):
