@@ -24,7 +24,7 @@ def download_update_callback(update_info):
 if __name__ == "__main__":
     root = tk.Tk()
     
-    current_version = "2.2"
+    current_version = "2.3"
     update_manager = UpdateManager(current_version)
     gui = YouTubeDownloaderGUI(root, start_download_callback, stop_download_callback, check_for_updates_callback, download_update_callback)
     downloader = Downloader(gui)

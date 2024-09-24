@@ -8,7 +8,7 @@ import os
 class YouTubeDownloaderGUI:
     def __init__(self, root, start_download_callback, stop_download_callback, check_for_updates_callback, download_update_callback):
         self.root = root
-        self.current_version = "2.2" #Program  version
+        self.current_version = "2.3" #Program  version
         self.start_download_callback = start_download_callback
         self.stop_download_callback = stop_download_callback
         self.check_for_updates_callback = check_for_updates_callback
