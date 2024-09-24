@@ -1,15 +1,49 @@
 import os
 import subprocess
 import time
+import requests
+import zipfile
+import io
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 from utils import get_download_folder, progress_hook
+
+def download_ffmpeg():
+    ffmpeg_url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+    ffmpeg_zip_path = "ffmpeg.zip"
+    ffmpeg_folder = "ffmpeg"
+
+    if not os.path.exists(ffmpeg_folder):
+        os.makedirs(ffmpeg_folder)
+        print("Pobieranie ffmpeg...")
+        response = requests.get(ffmpeg_url)
+        with open(ffmpeg_zip_path, 'wb') as file:
+            file.write(response.content)
+
+        with zipfile.ZipFile(ffmpeg_zip_path, 'r') as zip_ref:
+            for member in zip_ref.namelist():
+                filename = os.path.basename(member)
+                if filename:  # nie puste
+                    source = zip_ref.open(member)
+                    target = open(os.path.join(ffmpeg_folder, filename), "wb")
+                    with source, target:
+                        target.write(source.read())
+
+        os.remove(ffmpeg_zip_path)
+        print("ffmpeg pobrano i rozpakowano.")
+
+    ffmpeg_executable = os.path.join(ffmpeg_folder, "ffmpeg.exe")
+    if not os.path.exists(ffmpeg_executable):
+        raise FileNotFoundError(f"Nie znaleziono ffmpeg w {ffmpeg_executable}")
+    else:
+        print(f"ffmpeg znaleziono w {ffmpeg_executable}")
 
 class Downloader:
     def __init__(self, gui):
         self.stop_download = False
         self.paused = False
         self.gui = gui
+        download_ffmpeg()  # Dodaj to wywołanie
 
     def download_subtitles(self, url, subtitle_language):
         ydl_opts = {
@@ -30,6 +64,7 @@ class Downloader:
         ydl_opts = {
             'outtmpl': partial_file,
             'progress_hooks': [self.progress_hook_wrapper],
+            'ffmpeg_location': os.path.join("ffmpeg", "ffmpeg.exe"),  # Dodaj tę linię
             'continuedl': True,
         }
         with YoutubeDL(ydl_opts) as ydl:
@@ -38,9 +73,11 @@ class Downloader:
     def download_video(self, url, selected_resolution_text, download_subtitles, output_format, subtitle_language=None):
         self.stop_download = False
         download_folder = get_download_folder()
+        ffmpeg_path = os.path.join("ffmpeg", "ffmpeg.exe")
         ydl_opts = {
             'outtmpl': os.path.join(download_folder, '%(title)s.%(ext)s'),
             'progress_hooks': [self.progress_hook_wrapper],
+            'ffmpeg_location': ffmpeg_path,  # Dodaj tę linię
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'
             },
@@ -115,7 +152,7 @@ class Downloader:
                 # Konwersja do wybranego formatu, jeśli jest inny niż pierwotny
                 if selected_resolution_text != "Tylko audio" and output_format and ext != f'.{output_format}':
                     new_filename = f"{base}.{output_format}"
-                    subprocess.run(["ffmpeg", "-i", filename, new_filename])
+                    subprocess.run([ffmpeg_path, "-i", filename, new_filename])
                     os.remove(filename)  # Usunięcie oryginalnego pliku
                     filename = new_filename
 
@@ -143,10 +180,11 @@ class Downloader:
         self.paused = False
 
     def convert_format(self, input_file, output_format):
+        ffmpeg_path = os.path.join("ffmpeg", "ffmpeg.exe")
         output_file = os.path.splitext(input_file)[0] + "." + output_format
         total_duration = self.get_video_duration(input_file)
         
-        command = ["ffmpeg", "-i", input_file, "-progress", "pipe:1", "-nostats", output_file]
+        command = [ffmpeg_path, "-i", input_file, "-progress", "pipe:1", "-nostats", output_file]
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
         
         start_time = time.time()
@@ -164,7 +202,8 @@ class Downloader:
         return output_file
 
     def get_video_duration(self, input_file):
-        result = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input_file], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        ffmpeg_path = os.path.join("ffmpeg", "ffprobe.exe")
+        result = subprocess.run([ffmpeg_path, "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input_file], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         return float(result.stdout)
 
     def update_conversion_progress(self, progress, remaining_time, details):
