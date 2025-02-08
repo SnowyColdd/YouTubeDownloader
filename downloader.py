@@ -3,11 +3,11 @@ import subprocess
 import time
 import requests
 import zipfile
-import io
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 from utils import get_download_folder, progress_hook
 
+# Function to download and extract ffmpeg binaries if not already present
 def download_ffmpeg():
     ffmpeg_url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
     ffmpeg_zip_path = "ffmpeg.zip"
@@ -23,7 +23,7 @@ def download_ffmpeg():
         with zipfile.ZipFile(ffmpeg_zip_path, 'r') as zip_ref:
             for member in zip_ref.namelist():
                 filename = os.path.basename(member)
-                if filename:  # nie puste
+                if filename:
                     source = zip_ref.open(member)
                     target = open(os.path.join(ffmpeg_folder, filename), "wb")
                     with source, target:
@@ -43,8 +43,9 @@ class Downloader:
         self.stop_download = False
         self.paused = False
         self.gui = gui
-        download_ffmpeg()  # Dodaj to wywołanie
+        download_ffmpeg()
 
+    # Download subtitles for a given URL
     def download_subtitles(self, url, subtitle_language):
         ydl_opts = {
             'writesubtitles': True,
@@ -60,6 +61,7 @@ class Downloader:
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
 
+    # Resume a partially downloaded video
     def resume_download(self, url, partial_file):
         ydl_opts = {
             'outtmpl': partial_file,
@@ -70,6 +72,7 @@ class Downloader:
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
 
+    # Download video or audio from a given URL
     def download_video(self, url, selected_resolution_text, download_subtitles, output_format, subtitle_language=None):
         self.stop_download = False
         download_folder = get_download_folder()
@@ -86,7 +89,7 @@ class Downloader:
         if selected_resolution_text == "Tylko audio":
             ydl_opts['format'] = "bestaudio/best"
             
-            # Obsługa różnych formatów wyjściowych dla audio
+            # Handle audio output format conversion
             if output_format == "mp3":
                 ydl_opts['postprocessors'] = [{
                     'key': 'FFmpegExtractAudio',
@@ -111,7 +114,7 @@ class Downloader:
             selected_res = resolution_map.get(selected_resolution_text, "best")
             ydl_opts['format'] = f'bestvideo[height<={selected_res}]+bestaudio/best[height<={selected_res}]'
 
-        # Obsługa pobierania/generowania napisów
+        # Reset postprocessors for subtitles download if needed
         ydl_opts['postprocessors'] = [] 
 
         if download_subtitles:
@@ -145,15 +148,15 @@ class Downloader:
                         ydl_opts['writesubtitles'] = False
                         ydl_opts['writeautomaticsub'] = False
 
-                ydl.download([url])
+                ydl.download([url]) # Start download
                 filename = ydl.prepare_filename(info)
                 base, ext = os.path.splitext(filename)
 
-                # Konwersja do wybranego formatu, jeśli jest inny niż pierwotny
+                # Convert video to the selected format if necessary
                 if selected_resolution_text != "Tylko audio" and output_format and ext != f'.{output_format}':
                     new_filename = f"{base}.{output_format}"
                     subprocess.run([ffmpeg_path, "-i", filename, new_filename])
-                    os.remove(filename)  # Usunięcie oryginalnego pliku
+                    os.remove(filename)  # Remove the original file after conversion
                     filename = new_filename
 
         except DownloadError as e:
@@ -167,18 +170,23 @@ class Downloader:
 
         return "Pobieranie zakończone!"
     
+    # Wrapper for the progress hook to update the GUI elements
     def progress_hook_wrapper(self, d):
         return progress_hook(d, self.stop_download, self.gui.progress_label, self.gui.size_label, self.gui.progress_bar, self.gui.speed_label, self.gui.eta_label)
 
+    # Stop the current download
     def stop(self):
         self.stop_download = True
 
+    # Pause the download process
     def pause(self):
         self.paused = True
-    
+
+    # Resume the paused download process
     def resume(self):
         self.paused = False
 
+    # Convert the downloaded file to a different format using ffmpeg
     def convert_format(self, input_file, output_format):
         ffmpeg_path = os.path.join("ffmpeg", "ffmpeg.exe")
         output_file = os.path.splitext(input_file)[0] + "." + output_format
@@ -188,6 +196,7 @@ class Downloader:
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
         
         start_time = time.time()
+        # Process conversion progress output
         for line in iter(process.stdout.readline, ''):
             if 'out_time_ms' in line:
                 time_ms = int(line.split('=')[1])
@@ -201,13 +210,15 @@ class Downloader:
         process.wait()
         return output_file
 
+    # Get the duration of the video using ffprobe
     def get_video_duration(self, input_file):
         ffmpeg_path = os.path.join("ffmpeg", "ffprobe.exe")
         result = subprocess.run([ffmpeg_path, "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input_file], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         return float(result.stdout)
 
+    # Update conversion progress on the GUI
     def update_conversion_progress(self, progress, remaining_time, details):
-        self.gui.conversion_label.config(text=f"Konwersja: {progress:.2f}%")
+        self.gui.conversion_label.config(text=f"Konwersja: {progress:.2f}%") # Conversion progress
         self.gui.conversion_progress['value'] = progress
         self.gui.conversion_time_label.config(text=f"Pozostały czas: {time.strftime('%M:%S', time.gmtime(remaining_time))}")
         self.gui.conversion_details_label.config(text=details)

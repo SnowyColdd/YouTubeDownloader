@@ -2,15 +2,22 @@ import re
 import os
 import winreg
 import time
+import csv
+from datetime import datetime
+from functools import lru_cache
+from yt_dlp import YoutubeDL
 
+#Checks if the provided URL is a YouTube link.
 def is_youtube_link(url):
-        youtube_regex = r'(https?://)?(www\.)?(youtube|youtu|youtube-nocookie)\.(com|be)/'
-        return re.match(youtube_regex, url) is not None
+    youtube_regex = r'(https?://)?(www\.)?(youtube|youtu|youtube-nocookie)\.(com|be)/'
+    return re.match(youtube_regex, url) is not None
 
+#Removes ANSI escape sequences from text.
 def remove_ansi_escape_sequences(text):
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     return ansi_escape.sub('', text)
 
+#Returns the path to the YouTube download folder.
 def get_download_folder():
     try:
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders')
@@ -25,6 +32,7 @@ def get_download_folder():
         print(f"Bład przy pobieraniu ścieżki do folderu Pobrane: {e}")
         return os.path.join(os.path.expanduser("~"), "Downloads", "YouTube")
 
+#Updates the GUI based on the download progress.
 def progress_hook(d, stop_download, progress_label, size_label, progress_bar, speed_label, eta_label):
     if stop_download:
         raise Exception("Pobieranie zatrzymane przez użytkownika.")
@@ -52,19 +60,19 @@ def progress_hook(d, stop_download, progress_label, size_label, progress_bar, sp
         speed_label.config(text="")
         eta_label.config(text="")
 
-def is_youtube_link(url):
-    return 'youtube.com' in url or 'youtu.be' in url
+@lru_cache(maxsize=1000)
+def get_video_metadata(url):
+    with YoutubeDL() as ydl:
+        return ydl.extract_info(url, download=False)
 
+#Formats time in seconds to HH:MM:SS format.
 def format_time(seconds):
     hours, remainder = divmod(seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
 
-import csv
-from datetime import datetime
-
+#Generates a download report.
 def generate_download_report(downloads):
-    """Generuje raport z pobierań."""
     report_file = f"raport_pobran_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     with open(report_file, 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
